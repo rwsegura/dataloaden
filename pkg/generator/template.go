@@ -19,6 +19,12 @@ import (
     {{if .ValType.ImportPath}}"{{.ValType.ImportPath}}"{{end}}
 )
 
+type {{.Name}}Cache interface {
+	func Store(key {{.KeyType.String}}, value {{.ValType.String}})
+	func Get(key {{.KeyType.String}}) (value {{.ValType.String}}, ok bool)
+	func Remove(key {{.KeyType.String}})
+}
+
 // {{.Name}}Config captures the config to create a new {{.Name}}
 type {{.Name}}Config struct {
 	// Fetch is a method that provides the data for the loader 
@@ -32,11 +38,12 @@ type {{.Name}}Config struct {
 }
 
 // New{{.Name}} creates a new {{.Name}} given a fetch, wait, and maxBatch
-func New{{.Name}}(config {{.Name}}Config) *{{.Name}} {
+func New{{.Name}}(config {{.Name}}Config, cache {{.Name}}Cache) *{{.Name}} {
 	return &{{.Name}}{
 		fetch: config.Fetch,
 		wait: config.Wait,
 		maxBatch: config.MaxBatch,
+		cache: cache,
 	}
 }
 
@@ -54,7 +61,7 @@ type {{.Name}} struct {
 	// INTERNAL
 
 	// lazily created cache
-	cache map[{{.KeyType.String}}]{{.ValType.String}}
+	cache {{.Name}}Cache
 
 	// the current batch. keys will continue to be collected until timeout is hit,
 	// then everything will be sent to the fetch method and out to the listeners
@@ -82,7 +89,7 @@ func (l *{{.Name}}) Load(key {{.KeyType.String}}) ({{.ValType.String}}, error) {
 // different data loaders without blocking until the thunk is called.
 func (l *{{.Name}}) LoadThunk(key {{.KeyType.String}}) func() ({{.ValType.String}}, error) {
 	l.mu.Lock()
-	if it, ok := l.cache[key]; ok {
+	if it, ok := l.cache.Get(key); ok {
 		l.mu.Unlock()
 		return func() ({{.ValType.String}}, error) {
 			return it, nil
@@ -162,7 +169,7 @@ func (l *{{.Name}}) LoadAllThunk(keys []{{.KeyType}}) (func() ([]{{.ValType.Stri
 func (l *{{.Name}}) Prime(key {{.KeyType}}, value {{.ValType.String}}) bool {
 	l.mu.Lock()
 	var found bool
-	if _, found = l.cache[key]; !found {
+	if _, found = l.cache.Get(key); !found {
 		{{- if .ValType.IsPtr }}
 			// make a copy when writing to the cache, its easy to pass a pointer in from a loop var
 			// and end up with the whole cache pointing to the same value.
@@ -185,15 +192,15 @@ func (l *{{.Name}}) Prime(key {{.KeyType}}, value {{.ValType.String}}) bool {
 // Clear the value at key from the cache, if it exists
 func (l *{{.Name}}) Clear(key {{.KeyType}}) {
 	l.mu.Lock()
-	delete(l.cache, key)
+	l.cache.Remove(key)
 	l.mu.Unlock()
 }
 
 func (l *{{.Name}}) unsafeSet(key {{.KeyType}}, value {{.ValType.String}}) {
 	if l.cache == nil {
-		l.cache = map[{{.KeyType}}]{{.ValType.String}}{}
+		return
 	}
-	l.cache[key] = value
+	l.cache.Store(key, value)
 }
 
 // keyIndex will return the location of the key in the batch, if its not found
