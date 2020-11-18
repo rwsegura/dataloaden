@@ -20,9 +20,9 @@ import (
 )
 
 type {{.Name}}Cache interface {
-	func Store(key {{.KeyType.String}}, value {{.ValType.String}})
-	func Get(key {{.KeyType.String}}) (value {{.ValType.String}}, ok bool)
-	func Remove(key {{.KeyType.String}})
+	Store(key {{.KeyType.String}}, value {{.ValType.String}})
+	Get(key {{.KeyType.String}}) (value {{.ValType.String}}, ok bool)
+	Remove(key {{.KeyType.String}})
 }
 
 // {{.Name}}Config captures the config to create a new {{.Name}}
